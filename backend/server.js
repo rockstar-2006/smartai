@@ -1,9 +1,9 @@
-// app.js
+// server.js
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const cookieParser = require('cookie-parser');
-require('dotenv').config();
+const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const quizRoutes = require('./routes/quiz');
@@ -16,79 +16,69 @@ const { createIndexes } = require('./config/dbIndexes');
 
 const app = express();
 
-// --- Config / Environment ---
+// --- Config ---
 const PORT = process.env.PORT || 3001;
+
+// allowed origins: include your local dev and production frontend (Vercel) URLs
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:8080';
-// Add your production frontend (Vercel) explicitly:
-const VERCEL_URL = process.env.VERCEL_URL || 'https://smartai-ten.vercel.app';
+const VERCEL_URL = process.env.VERCEL_URL || ''; // set in your env when deployed
+const allowedOrigins = new Set(
+  [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8080',
+    CLIENT_URL,
+    VERCEL_URL
+  ].filter(Boolean)
+);
 
-// Allowed dev/origins (keep local vite/webpack dev ports)
-const allowedOrigins = new Set([
-  'http://localhost:5173',
-  'http://localhost:8080',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:8080',
-  CLIENT_URL,
-  VERCEL_URL,
-].filter(Boolean));
-
-// --- Middleware ---
-// CORS: allow specific origins only, and allow credentials (cookies)
+// --- CORS middleware (echo origin when allowed) ---
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (!origin) {
-    // allow non-browser requests (curl, postman)
-    res.header('Access-Control-Allow-Origin', '*');
+    // non-browser clients: allow
+    res.setHeader('Access-Control-Allow-Origin', '*');
   } else if (allowedOrigins.has(origin)) {
-    // echo back origin (required when credentials=true)
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', origin); // echo back
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
-    // origin not allowed — do not set header (browser will block)
     console.warn(`Blocked CORS request from origin: ${origin}`);
   }
-  // common CORS headers
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  // continue
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   next();
 });
 
-// handle preflight requests quickly (OPTIONS)
+// quick OPTIONS handler
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
   if (!origin || allowedOrigins.has(origin)) {
-    // If origin allowed or missing, respond OK
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.sendStatus(200);
-  } else {
-    res.sendStatus(403);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    return res.sendStatus(200);
   }
+  return res.sendStatus(403);
 });
 
-// Parse JSON and cookies BEFORE routes
+// parse JSON and cookies
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- Database connection ---
+// --- MongoDB connect (env: MONGODB_URI) ---
 const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/quizapp';
-
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log('MongoDB connected successfully');
-    try {
-      if (typeof createIndexes === 'function') {
+    if (typeof createIndexes === 'function') {
+      try {
         await createIndexes();
         console.log('DB indexes created');
+      } catch (err) {
+        console.error('Error creating DB indexes:', err);
       }
-    } catch (err) {
-      console.error('Error creating DB indexes:', err);
     }
   })
   .catch((err) => console.error('MongoDB connection error:', err));
@@ -101,18 +91,15 @@ app.use('/api/bookmarks', bookmarkRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/student-quiz', studentQuizRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
-});
+// health
+app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
-// 404 / error handlers (must be after routes)
+// error handlers
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
+// start
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Allowed client origins:`, Array.from(allowedOrigins));
 });
