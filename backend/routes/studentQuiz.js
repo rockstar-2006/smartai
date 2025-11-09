@@ -1,14 +1,53 @@
-// routes/studentQuiz.js
+// backend/routes/studentQuiz.js
 const express = require('express');
 const Quiz = require('../models/Quiz');
 const QuizShare = require('../models/QuizShare');
 const QuizAttempt = require('../models/QuizAttempt');
-const gradingService = require('../services/gradingService'); // may fallback if not configured
+const gradingService = require('../services/gradingService'); // optional
 
 const router = express.Router();
 
-// GET /api/student-quiz/attempt/:token
-// Validate token and return quiz + attempt state
+/**
+ * New route:
+ * GET /api/student-quiz/token/:token
+ * Return quiz metadata (or 404) for the token in the share record.
+ */
+router.get('/token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) return res.status(400).json({ message: 'Token required' });
+
+    const share = await QuizShare.findOne({ token }).populate('quizId');
+    if (!share) return res.status(404).json({ message: 'Share link not found or expired' });
+
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
+      return res.status(410).json({ message: 'Link expired' });
+    }
+
+    const quiz = share.quizId;
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
+
+    // Return safe quiz preview for student start page (no answers)
+    const safeQuiz = {
+      id: quiz._id,
+      title: quiz.title,
+      description: quiz.description,
+      duration: quiz.duration,
+      numQuestions: (quiz.questions && quiz.questions.length) || quiz.numQuestions || 0,
+      // do not send correct answers here
+    };
+
+    return res.json({ quiz: safeQuiz, email: share.email });
+  } catch (err) {
+    console.error('GET /student-quiz/token/:token error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * Existing route: GET /api/student-quiz/attempt/:token
+ * Returns in-progress vs not-started state and (if started) attempt data.
+ */
 router.get('/attempt/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -23,21 +62,17 @@ router.get('/attempt/:token', async (req, res) => {
       return res.status(403).json({ message: 'Link expired' });
     }
 
-    // If share is already taken, respond accordingly
+    // Already submitted?
     const priorSubmitted = await QuizAttempt.findOne({
       uniqueToken: token,
       status: { $in: ['submitted', 'graded'] }
     });
     if (priorSubmitted) {
-      // mark share as taken
-      try {
-        share.status = 'taken';
-        await share.save();
-      } catch (e) { /* ignore */ }
+      try { share.status = 'taken'; await share.save(); } catch (e) { /* ignore */ }
       return res.json({ alreadySubmitted: true, message: 'Quiz already submitted' });
     }
 
-    // If there is an in-progress attempt, return it for resume
+    // In-progress attempt (resume)
     const existingAttempt = await QuizAttempt.findOne({ uniqueToken: token, status: 'in-progress' });
     if (existingAttempt) {
       const quiz = await Quiz.findById(existingAttempt.quizId).lean();
@@ -65,11 +100,10 @@ router.get('/attempt/:token', async (req, res) => {
       });
     }
 
-    // No attempt yet: return quiz and optional student info (from Student collection if exists)
+    // Not started yet: return quiz metadata and optional studentInfo
     const quiz = await Quiz.findById(share.quizId).lean();
     if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
 
-    // Optionally try to load student record (if Student model exists)
     let studentInfo = null;
     try {
       const Student = require('../models/Student');
@@ -105,8 +139,10 @@ router.get('/attempt/:token', async (req, res) => {
   }
 });
 
-// POST /api/student-quiz/attempt/start
-// Body: { token, studentName, studentUSN, studentBranch, studentYear, studentSemester }
+/**
+ * POST /api/student-quiz/attempt/start
+ * Body: { token, studentName, studentUSN, studentBranch, studentYear, studentSemester }
+ */
 router.post('/attempt/start', async (req, res) => {
   try {
     const { token, studentName, studentUSN, studentBranch, studentYear, studentSemester } = req.body;
@@ -129,7 +165,7 @@ router.post('/attempt/start', async (req, res) => {
     const quiz = await Quiz.findById(share.quizId).lean();
     if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
 
-    // If an in-progress attempt exists for this token, return it
+    // resume if in-progress exists
     let attempt = await QuizAttempt.findOne({ uniqueToken: token, status: 'in-progress' });
     if (attempt) {
       return res.json({
@@ -145,7 +181,6 @@ router.post('/attempt/start', async (req, res) => {
       });
     }
 
-    // Create a fresh attempt with empty answers array matching quiz questions length
     const qlen = (quiz.questions && quiz.questions.length) || quiz.numQuestions || 0;
     const answersPlaceholder = new Array(qlen).fill('');
 
@@ -181,8 +216,10 @@ router.post('/attempt/start', async (req, res) => {
   }
 });
 
-// POST /api/student-quiz/attempt/submit
-// Body: { attemptId, answers: [ ... ] }
+/**
+ * POST /api/student-quiz/attempt/submit
+ * Body: { attemptId, answers: [ ... ] }
+ */
 router.post('/attempt/submit', async (req, res) => {
   try {
     const { attemptId, answers } = req.body;
@@ -202,7 +239,6 @@ router.post('/attempt/submit', async (req, res) => {
     const provided = answers.slice(0, qlen);
     while (provided.length < qlen) provided.push('');
 
-    // Auto-grade MCQs; use gradingService for short answers if available
     let totalMarks = 0;
     let maxMarks = 0;
     const perQuestion = [];
@@ -212,8 +248,7 @@ router.post('/attempt/submit', async (req, res) => {
       const expected = (q && q.answer) ? String(q.answer).trim().toUpperCase() : '';
       const givenRaw = provided[i] != null ? String(provided[i]) : '';
       const given = givenRaw.trim();
-
-      const max = 1; // default marks per question = 1 (customize if you have marks field)
+      const max = 1;
       maxMarks += max;
 
       let correct = false;
@@ -226,7 +261,6 @@ router.post('/attempt/submit', async (req, res) => {
           totalMarks += awarded;
         }
       } else {
-        // short-answer: try gradingService (may fallback to heuristic)
         try {
           if (gradingService && typeof gradingService.gradeShortAnswer === 'function') {
             const grading = await gradingService.gradeShortAnswer(q.question || '', q.answer || '', given);
@@ -247,12 +281,9 @@ router.post('/attempt/submit', async (req, res) => {
         } catch (err) {
           console.error('Short answer grading error:', err);
         }
-
-        // fallback: nothing awarded for short answers
         awarded = 0;
       }
 
-      // push per-question info for MCQ or fallback cases
       perQuestion.push({
         questionIndex: i,
         correct,
@@ -265,7 +296,6 @@ router.post('/attempt/submit', async (req, res) => {
 
     const percentage = maxMarks > 0 ? Math.round((totalMarks / maxMarks) * 100) : 0;
 
-    // update attempt
     attempt.answers = provided;
     attempt.status = 'submitted';
     attempt.submittedAt = new Date();
@@ -276,7 +306,6 @@ router.post('/attempt/submit', async (req, res) => {
 
     await attempt.save();
 
-    // mark share as taken
     try {
       await QuizShare.findOneAndUpdate({ token: attempt.uniqueToken }, { status: 'taken' });
     } catch (e) {

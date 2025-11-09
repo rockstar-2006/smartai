@@ -1,3 +1,4 @@
+// backend/models/QuizShare.js
 const mongoose = require('mongoose');
 
 const quizShareSchema = new mongoose.Schema({
@@ -32,6 +33,8 @@ const quizShareSchema = new mongoose.Schema({
     enum: ['pending', 'sent', 'taken', 'expired'],
     default: 'pending',
   },
+}, {
+  timestamps: true
 });
 
 module.exports = mongoose.model('QuizShare', quizShareSchema);
