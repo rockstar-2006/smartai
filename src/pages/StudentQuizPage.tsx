@@ -101,11 +101,25 @@ export default function StudentQuizPage() {
     });
   };
 
-  // ---------- Fetch quiz data ----------
+  // ---------- Fetch quiz data (first token preview, then attempt state) ----------
   const fetchQuizData = async () => {
     setLoading(true);
     setNotFound(false);
+
     try {
+      // 1) Try preview endpoint to quickly get quiz metadata + email
+      try {
+        const previewRes = await axios.get(`${API_URL}/student-quiz/token/${token}`);
+        if (previewRes?.data?.quiz) {
+          setQuiz(previewRes.data.quiz);
+          if (previewRes.data.email) setEmail(previewRes.data.email);
+        }
+      } catch (previewErr) {
+        // preview may 404 if not implemented; ignore and continue to attempt endpoint below
+        // console.warn('Preview endpoint failed:', previewErr?.response?.data || previewErr.message);
+      }
+
+      // 2) Check attempt state (in-progress / already submitted / not started)
       const response = await axios.get(`${API_URL}/student-quiz/attempt/${token}`);
       const data = response.data;
 
@@ -120,8 +134,11 @@ export default function StudentQuizPage() {
         return;
       }
 
-      if (data.quiz) setQuiz(data.quiz);
-      else {
+      // If attempt returned a quiz payload, use it (this contains questions if started/resuming)
+      if (data.quiz) {
+        setQuiz((prev) => data.quiz || prev);
+      } else if (!quiz) {
+        // If neither preview nor attempt provided quiz metadata -> not found
         setNotFound(true);
         setLoading(false);
         return;
@@ -129,13 +146,13 @@ export default function StudentQuizPage() {
 
       if (data.email) setEmail(data.email);
 
-      const qlen = (data.quiz.questions && data.quiz.questions.length) || data.quiz.numQuestions || 0;
+      const qlen = (data.quiz?.questions && data.quiz.questions.length) || quiz?.numQuestions || quiz?.questions?.length || 0;
       ensureAnswersLength(qlen);
 
       if (data.hasStarted && data.attemptId) {
         setAttemptId(data.attemptId);
         setQuizStarted(true);
-        // prefill student info if server provided it
+
         if (data.studentInfo) {
           if (data.studentInfo.name) setStudentName(data.studentInfo.name);
           if (data.studentInfo.usn) setStudentUSN(data.studentInfo.usn);
@@ -143,10 +160,11 @@ export default function StudentQuizPage() {
           if (data.studentInfo.year) setStudentYear(data.studentInfo.year);
           if (data.studentInfo.semester) setStudentSemester(data.studentInfo.semester);
         }
-        setTimeLeft(((data.quiz.duration || 30) as number) * 60);
-        // If resuming an in-progress attempt, start anti-cheat listeners
+
+        setTimeLeft(((data.quiz?.duration || quiz?.duration || 30) as number) * 60);
         startAntiCheat();
       } else {
+        // not started yet: show info form
         setShowInfoForm(true);
       }
 
@@ -508,7 +526,6 @@ export default function StudentQuizPage() {
   };
 
   const autoSubmitDueToTimeout = async () => {
-    // similar to autoSubmitDueToViolation but reason=timeout
     if (submitting || quizSubmitted) return;
     if (!attemptId) return;
     setSubmitting(true);
@@ -561,7 +578,6 @@ export default function StudentQuizPage() {
 
   // ---------- UI ----------
 
-  // Loading skeleton
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -570,7 +586,6 @@ export default function StudentQuizPage() {
     );
   }
 
-  // Not found or expired link
   if (notFound || !quiz) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -587,7 +602,6 @@ export default function StudentQuizPage() {
     );
   }
 
-  // Quiz already submitted
   if (quizSubmitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -604,7 +618,6 @@ export default function StudentQuizPage() {
     );
   }
 
-  // Violation banner overlay
   const ViolationBanner = () => (
     showViolationWarning ? (
       <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-600 text-white px-4 py-2 rounded shadow">
@@ -613,7 +626,6 @@ export default function StudentQuizPage() {
     ) : null
   );
 
-  // Student info form
   if (showInfoForm && quiz) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -711,7 +723,6 @@ export default function StudentQuizPage() {
     );
   }
 
-  // Quiz in progress UI
   if (quizStarted && quiz.questions) {
     const question = quiz.questions[currentQuestion];
     const progress = ((currentQuestion + 1) / quiz.questions.length) * 100;
@@ -720,12 +731,10 @@ export default function StudentQuizPage() {
       <div className="min-h-screen bg-background">
         <ViolationBanner />
 
-        {/* show small hint if not fullscreen */}
         {!isFullscreen && (
           <div className="fixed top-4 right-4 z-40 bg-yellow-600 text-black px-3 py-2 rounded">Please enable fullscreen</div>
         )}
 
-        {/* Header */}
         <div className="bg-card border-b sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 py-4">
             <div className="flex items-center justify-between mb-2">
@@ -750,7 +759,6 @@ export default function StudentQuizPage() {
           </div>
         </div>
 
-        {/* Question */}
         <div className="max-w-4xl mx-auto px-4 py-8">
           <Card>
             <CardHeader>
@@ -778,7 +786,6 @@ export default function StudentQuizPage() {
                 </div>
               )}
 
-              {/* Navigation */}
               <div className="flex items-center justify-between pt-4 border-t">
                 <Button variant="outline" onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))} disabled={currentQuestion === 0}>Previous</Button>
 
@@ -800,7 +807,6 @@ export default function StudentQuizPage() {
             </CardContent>
           </Card>
 
-          {/* Question Navigator */}
           <Card className="mt-4">
             <CardHeader>
               <CardTitle className="text-sm">Question Navigator</CardTitle>
@@ -820,6 +826,5 @@ export default function StudentQuizPage() {
     );
   }
 
-  // fallback
   return null;
 }
