@@ -1,5 +1,5 @@
 // services/emailService.js
-// Hybrid email service: Use SendGrid when SENDGRID_API_KEY is present (recommended for Render).
+// Hybrid email service: Use SendGrid in production (SENDGRID_API_KEY).
 // Fall back to Nodemailer (Gmail) for local development when SENDGRID isn't configured.
 
 const isSendGrid = !!process.env.SENDGRID_API_KEY;
@@ -9,11 +9,9 @@ let nodemailer;
 let transporter;
 
 if (isSendGrid) {
-  // Use SendGrid HTTP API
   sendGrid = require('@sendgrid/mail');
   sendGrid.setApiKey(process.env.SENDGRID_API_KEY);
 } else {
-  // Fallback to Nodemailer (Gmail) for local dev
   nodemailer = require('nodemailer');
   transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -40,9 +38,7 @@ class EmailService {
     return `
       <!doctype html>
       <html>
-      <head>
-        <meta charset="utf-8" />
-      </head>
+      <head><meta charset="utf-8"/></head>
       <body style="font-family: Arial, sans-serif; color:#333; line-height:1.6;">
         <div style="max-width:600px;margin:0 auto;padding:20px;">
           <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:30px;border-radius:10px 10px 0 0;text-align:center;">
@@ -77,15 +73,8 @@ class EmailService {
     const text = `You have been invited to take a quiz: ${uniqueLink}`;
 
     if (isSendGrid) {
-      const msg = {
-        to: studentEmail,
-        from: this.from,
-        subject,
-        text,
-        html
-      };
+      const msg = { to: studentEmail, from: this.from, subject, text, html };
       try {
-        // SendGrid returns a Promise. For single recipient this should succeed.
         await sendGrid.send(msg);
         return { success: true };
       } catch (err) {
@@ -94,13 +83,7 @@ class EmailService {
         throw new Error('Failed to send email: ' + (typeof details === 'string' ? details : JSON.stringify(details)));
       }
     } else {
-      const mailOptions = {
-        from: `"${teacherName}" <${this.from}>`,
-        to: studentEmail,
-        subject,
-        text,
-        html
-      };
+      const mailOptions = { from: `"${teacherName}" <${this.from}>`, to: studentEmail, subject, text, html };
       try {
         const info = await transporter.sendMail(mailOptions);
         console.log('Email sent successfully (nodemailer):', info.messageId);
@@ -113,18 +96,14 @@ class EmailService {
   }
 
   async verifyConnection() {
-    if (isSendGrid) {
-      // Best-effort check: key presence; sendGrid SDK has no lightweight verify endpoint
-      return !!process.env.SENDGRID_API_KEY;
-    } else {
-      try {
-        await transporter.verify();
-        console.log('Nodemailer transporter verified');
-        return true;
-      } catch (err) {
-        console.error('Nodemailer verify error:', err);
-        return false;
-      }
+    if (isSendGrid) return !!process.env.SENDGRID_API_KEY;
+    try {
+      await transporter.verify();
+      console.log('Nodemailer transporter verified');
+      return true;
+    } catch (err) {
+      console.error('Nodemailer verify error:', err);
+      return false;
     }
   }
 }
