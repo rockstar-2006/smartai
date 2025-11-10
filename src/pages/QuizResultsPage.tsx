@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
-import { Download, ArrowLeft, Loader2, FileSpreadsheet, Users, Award, TrendingUp } from 'lucide-react';
-import { DashboardLayout } from '@/components/DashboardLayout';
+import { Download, ArrowLeft, Loader2, FileSpreadsheet, Users, Award, TrendingUp, RefreshCw } from 'lucide-react';
+import { quizAPI } from '@/services/api';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -28,31 +28,18 @@ interface QuizAttempt {
 
 export default function QuizResultsPage() {
   const { quizId } = useParams<{ quizId: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [quizTitle, setQuizTitle] = useState('');
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  useEffect(() => {
-    fetchResults();
-  }, [quizId]);
-
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     try {
-      const token = document.cookie
-        .split('; ')
-        .find((row) => row.startsWith('token='))
-        ?.split('=')[1];
-
-      const response = await axios.get(`${API_URL}/quiz/${quizId}/results`, {
-        headers: {
-          Cookie: `token=${token}`,
-        },
-        withCredentials: true,
-      });
-
-      setQuizTitle(response.data.quiz.title);
-      setAttempts(response.data.attempts);
+      const data = await quizAPI.getResults(quizId!);
+      setQuizTitle(data.quiz.title);
+      setAttempts(data.attempts);
     } catch (error: any) {
       console.error('Error fetching results:', error);
       toast({
@@ -63,7 +50,22 @@ export default function QuizResultsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [quizId]);
+
+  useEffect(() => {
+    fetchResults();
+  }, [fetchResults]);
+
+  // Auto-refresh every 10 seconds if enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      fetchResults();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchResults]);
 
   const handleDownloadExcel = async (detailed: boolean = false) => {
     setDownloading(true);
@@ -142,18 +144,27 @@ export default function QuizResultsPage() {
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Link to="/dashboard">
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
-                </Button>
-              </Link>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/results')}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Results
+              </Button>
             </div>
             <h1 className="text-3xl font-bold tracking-tight">Quiz Results</h1>
-            <p className="text-lg text-muted-foreground">{quizTitle}</p>
+            <p className="text-lg text-muted-foreground">
+              {quizTitle}
+              {autoRefresh && <span className="ml-2 text-xs">(Auto-refreshing every 10s)</span>}
+            </p>
           </div>
 
           <div className="flex gap-2">
+            <Button
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              variant={autoRefresh ? "default" : "outline"}
+              size="sm"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
+              {autoRefresh ? 'Auto-refresh On' : 'Auto-refresh Off'}
+            </Button>
             <Button onClick={() => handleDownloadExcel(false)} disabled={downloading || attempts.length === 0}>
               {downloading ? (
                 <>

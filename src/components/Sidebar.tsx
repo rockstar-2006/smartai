@@ -9,6 +9,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Student Details', path: '/students' },
   { icon: FileText, label: 'Create Quiz', path: '/create-quiz' },
+  { icon: FileText, label: 'Results', path: '/results' },
   { icon: Bookmark, label: 'Bookmarks', path: '/bookmarks' },
 ];
 

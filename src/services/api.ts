@@ -39,6 +39,15 @@ export const quizAPI = {
     const response = await api.delete(`/quiz/${quizId}`);
     return response.data;
   },
+    getAllWithStats: async (): Promise<any[]> => {
+    const response = await api.get('/quiz/results/all');
+    return response.data;
+  },
+
+  getResults: async (quizId: string): Promise<{ quiz: any; attempts: any[] }> => {
+    const response = await api.get(`/quiz/${quizId}/results`);
+    return response.data;
+  },
 };
 
 // Students API

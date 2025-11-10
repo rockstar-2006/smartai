@@ -1,4 +1,3 @@
-// routes/quiz.js
 const express = require('express');
 const crypto = require('crypto');
 const Quiz = require('../models/Quiz');
@@ -11,6 +10,50 @@ const router = express.Router();
 // Services
 const emailService = require('../services/emailService');
 const excelService = require('../services/excelService');
+
+//
+// New endpoint: Get all quizzes with attempt statistics
+//
+router.get('/results/all', protect, async (req, res) => {
+  try {
+    const QuizAttempt = require('../models/QuizAttempt');
+
+    // Find quizzes owned by the logged-in teacher
+    const quizzes = await Quiz.find({ userId: req.user._id }).sort('-createdAt').lean();
+
+    // For each quiz compute attempt statistics
+    const quizzesWithStats = await Promise.all(
+      quizzes.map(async (quiz) => {
+        const attempts = await QuizAttempt.find({
+          quizId: quiz._id,
+          teacherId: req.user._id
+        }).lean();
+
+        const submittedAttempts = attempts.filter(a => a.status === 'submitted' || a.status === 'graded');
+
+        const averageScore = submittedAttempts.length > 0
+          ? submittedAttempts.reduce((sum, a) => sum + (Number(a.percentage) || 0), 0) / submittedAttempts.length
+          : 0;
+
+        return {
+          ...quiz,
+          attemptCount: attempts.length,
+          submittedCount: submittedAttempts.length,
+          averageScore
+        };
+      })
+    );
+
+    return res.json(quizzesWithStats);
+  } catch (error) {
+    console.error('GET /quiz/results/all error:', error);
+    return res.status(400).json({ message: error.message || 'Failed to fetch quizzes with stats' });
+  }
+});
+
+//
+// Existing endpoints
+//
 
 // Get all quizzes
 router.get('/all', protect, async (req, res) => {
@@ -129,7 +172,7 @@ router.post('/share', protect, async (req, res) => {
     if (!quiz) return res.status(404).json({ message: 'Quiz not found or you do not own it' });
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const clientBase = process.env.CLIENT_URL || 'http://localhost:8080';
+    const clientBase = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:8080';
     const results = [];
     const failed = [];
 

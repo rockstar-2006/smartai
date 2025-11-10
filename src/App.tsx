@@ -14,6 +14,7 @@ import CreateQuizPage from "./pages/CreateQuizPage";
 import BookmarksPage from "./pages/BookmarksPage";
 import StudentQuizPage from "./pages/StudentQuizPage";
 import QuizResultsPage from "./pages/QuizResultsPage";
+import ResultsPage from "./pages/ResultsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,27 +36,25 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-
-            {/* Accept both server-generated link formats */}
-            <Route path="/take/:token" element={<StudentQuizPage />} />
-            <Route path="/quiz/attempt/:token" element={<StudentQuizPage />} />
-
-            <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/students" element={<StudentsPage />} />
-              <Route path="/create-quiz" element={<CreateQuizPage />} />
-              <Route path="/bookmarks" element={<BookmarksPage />} />
-              <Route path="/quiz/:quizId/results" element={<QuizResultsPage />} />
-            </Route>
-
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/quiz/attempt/:token" element={<StudentQuizPage />} />
+          
+          <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/students" element={<StudentsPage />} />
+            <Route path="/create-quiz" element={<CreateQuizPage />} />
+            <Route path="/results" element={<ResultsPage />} />
+            <Route path="/bookmarks" element={<BookmarksPage />} />
+            <Route path="/quiz/:quizId/results" element={<QuizResultsPage />} />
+          </Route>
+          
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
   );
 };
 
