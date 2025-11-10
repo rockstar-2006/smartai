@@ -660,8 +660,8 @@ export default function StudentQuizPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CSE">Computer Science Engineering</SelectItem>
-                  <SelectItem value="ISE">Information Science Engineering</SelectItem>
-                  <SelectItem value="ECE">Electronics & Communication</SelectItem>
+                  <SelectItem value="ISE">Artificial Intelligence And Data Science </SelectItem>
+                  <SelectItem value="ECE">Artificial Intelligence And Machine learning </SelectItem>
                   <SelectItem value="EEE">Electrical & Electronics</SelectItem>
                   <SelectItem value="ME">Mechanical Engineering</SelectItem>
                   <SelectItem value="CE">Civil Engineering</SelectItem>
