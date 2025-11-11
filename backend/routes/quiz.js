@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 // backend/routes/quiz.js
-=======
->>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
 const express = require('express');
 const crypto = require('crypto');
 const Quiz = require('../models/Quiz');
@@ -103,17 +100,10 @@ router.post('/share', protect, async (req, res) => {
 
     // Normalize single-string fields to array
     if (typeof studentEmails === 'string') {
-<<<<<<< HEAD
       studentEmails = studentEmails.includes(',') ? studentEmails.split(',').map(s => s.trim()) : [studentEmails.trim()];
     }
     if (typeof recipients === 'string') {
       recipients = recipients.includes(',') ? recipients.split(',').map(s => s.trim()) : [recipients.trim()];
-=======
-      studentEmails = studentEmails.includes(',') ? studentEmails.split(',').map(s=>s.trim()) : [studentEmails.trim()];
-    }
-    if (typeof recipients === 'string') {
-      recipients = recipients.includes(',') ? recipients.split(',').map(s=>s.trim()) : [recipients.trim()];
->>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
     }
 
     if (!Array.isArray(recipients) && Array.isArray(studentEmails)) {
@@ -139,13 +129,8 @@ router.post('/share', protect, async (req, res) => {
     if (!quiz) return res.status(404).json({ message: 'Quiz not found or you do not own it' });
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-<<<<<<< HEAD
     // Prefer CLIENT_URL -> FRONTEND_URL -> VERCEL_URL -> fallback
     const clientBase = (process.env.CLIENT_URL || process.env.FRONTEND_URL || process.env.VERCEL_URL || 'http://localhost:3000').replace(/\/$/, '');
-=======
-    // Normalize and prefer CLIENT_URL, fallback to FRONTEND_URL or localhost:3000
-    const clientBase = (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
->>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
     const results = [];
     const failed = [];
 
@@ -243,11 +228,7 @@ router.get('/:id/validate-token', async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // results and download endpoints
-=======
-// results and download endpoints (unchanged)
->>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
 router.get('/:id/results', protect, async (req, res) => {
   try {
     const QuizAttempt = require('../models/QuizAttempt');
@@ -255,7 +236,6 @@ router.get('/:id/results', protect, async (req, res) => {
     const quiz = await Quiz.findOne({
       _id: req.params.id,
       userId: req.user._id
-<<<<<<< HEAD
     }).lean();
     if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
 
@@ -363,26 +343,6 @@ router.get('/:id/results', protect, async (req, res) => {
         attempts
       });
     }
-=======
-    });
-    if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
-
-    const attempts = await QuizAttempt.find({
-      quizId: req.params.id,
-      teacherId: req.user._id
-    }).sort('-submittedAt');
-
-    res.json({
-      success: true,
-      quiz: {
-        id: quiz._id,
-        title: quiz.title,
-        description: quiz.description,
-        numQuestions: quiz.questions.length
-      },
-      attempts
-    });
->>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
   } catch (error) {
     console.error('GET /quiz/:id/results error:', error);
     res.status(400).json({ message: error.message });
