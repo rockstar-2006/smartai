@@ -10,7 +10,7 @@ interface QuizWithStats {
   _id: string;
   title: string;
   description?: string;
-  duration?: number;
+  duration?: number | null;
   createdAt: string;
   attemptCount: number;
   submittedCount: number;
@@ -21,19 +21,70 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuizzesWithStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchQuizzesWithStats = async () => {
+    setLoading(true);
+    setLoadError(null);
+
     try {
-      setLoading(true);
+      // Primary attempt: aggregated stats endpoint
       const data = await quizAPI.getAllWithStats();
-      setQuizzes(data);
-    } catch (error) {
-      console.error('Error fetching quiz results:', error);
-      toast.error('Failed to load quiz results');
+      // normalize returned items to QuizWithStats shape (defensive)
+      const normalized = (data || []).map((q: any) => ({
+        _id: q._id,
+        title: q.title,
+        description: q.description || '',
+        duration: q.duration ?? null,
+        createdAt: q.createdAt,
+        attemptCount: typeof q.attemptCount === 'number' ? q.attemptCount : 0,
+        submittedCount: typeof q.submittedCount === 'number' ? q.submittedCount : 0,
+        averageScore: typeof q.averageScore === 'number' ? q.averageScore : undefined
+      })) as QuizWithStats[];
+
+      setQuizzes(normalized);
+    } catch (err: any) {
+      console.error('Error fetching quiz results:', err);
+
+      // Auth errors -> redirect to login
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        toast.error('Your session has expired. Please log in again.');
+        navigate('/login');
+        return;
+      }
+
+      // If endpoint missing (404) or other server error, fallback to /quiz/all (no stats)
+      if (status === 404) {
+        try {
+          const all = await quizAPI.getAll();
+          const mapped = (all || []).map((q: any) => ({
+            _id: q._id,
+            title: q.title,
+            description: q.description || '',
+            duration: q.duration ?? null,
+            createdAt: q.createdAt,
+            attemptCount: 0,
+            submittedCount: 0,
+            averageScore: undefined
+          })) as QuizWithStats[];
+          setQuizzes(mapped);
+          toast('Loaded quizzes (no stats available).');
+        } catch (innerErr) {
+          console.error('Fallback /quiz/all failed:', innerErr);
+          setLoadError('Failed to load quizzes.');
+          toast.error('Failed to load quiz results');
+        }
+      } else {
+        // Generic error
+        setLoadError('Failed to load quiz results');
+        toast.error('Failed to load quiz results');
+      }
     } finally {
       setLoading(false);
     }
@@ -41,6 +92,10 @@ export default function ResultsPage() {
 
   const handleViewResults = (quizId: string) => {
     navigate(`/quiz/${quizId}/results`);
+  };
+
+  const handleRetry = () => {
+    fetchQuizzesWithStats();
   };
 
   if (loading) {
@@ -55,14 +110,38 @@ export default function ResultsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Quiz Results</h1>
-        <p className="text-muted-foreground">
-          View and manage results for all your quizzes
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Quiz Results</h1>
+          <p className="text-muted-foreground">
+            View and manage results for all your quizzes
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleRetry} variant="ghost">
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      {quizzes.length === 0 ? (
+      {loadError ? (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-12">
+              <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Could not load results</h3>
+              <p className="text-muted-foreground mb-4">{loadError}</p>
+              <div className="flex justify-center gap-2">
+                <Button onClick={handleRetry}>Retry</Button>
+                <Button variant="outline" onClick={() => navigate('/create-quiz')}>
+                  Create Quiz
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : quizzes.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
@@ -109,7 +188,7 @@ export default function ResultsPage() {
                     </span>
                   </div>
 
-                  {quiz.duration && (
+                  {quiz.duration != null && (
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">
