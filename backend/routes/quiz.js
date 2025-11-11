@@ -1,3 +1,4 @@
+// routes/quiz.js
 const express = require('express');
 const crypto = require('crypto');
 const Quiz = require('../models/Quiz');
@@ -128,7 +129,10 @@ router.post('/share', protect, async (req, res) => {
     if (!quiz) return res.status(404).json({ message: 'Quiz not found or you do not own it' });
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const clientBase = process.env.CLIENT_URL || 'http://localhost:8080';
+
+    // Choose client base: prefer explicit CLIENT_URL, then VERCEL_URL, then localhost
+    const clientBase = (process.env.CLIENT_URL || process.env.VERCEL_URL || 'http://localhost:8080').replace(/\/$/, '');
+
     const results = [];
     const failed = [];
 
@@ -160,12 +164,12 @@ router.post('/share', protect, async (req, res) => {
         // IMPORTANT: link uses token in path for student page
         const uniqueLink = `${clientBase}/take/${token}`;
 
-        // send email
+        // send email (use req.user.name if available)
         await emailService.sendQuizInvitation(
           email,
           quiz.title,
           uniqueLink,
-          req.user.name,
+          req.user && req.user.name ? req.user.name : 'Your Instructor',
           message || ''
         );
 
