@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 // src/pages/ResultsPage.tsx
+=======
+>>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { quizAPI } from '@/services/api';

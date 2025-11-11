@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // backend/models/QuizAttempt.js
+=======
+// models/QuizAttempt.js
+>>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
 const mongoose = require('mongoose');
 
 const quizAttemptSchema = new mongoose.Schema({
@@ -35,8 +39,12 @@ const quizAttemptSchema = new mongoose.Schema({
       awarded: Number,
       max: Number,
       expectedAnswer: String,
+<<<<<<< HEAD
       givenAnswer: String,
       explanation: String
+=======
+      givenAnswer: String
+>>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
     }
   ],
 
@@ -52,10 +60,16 @@ const quizAttemptSchema = new mongoose.Schema({
 
   // token used in share link (unique per share)
   uniqueToken: { type: String, required: true, unique: true }
+<<<<<<< HEAD
 }, {
   timestamps: true
 });
 
+=======
+});
+
+// Useful indexes
+>>>>>>> 8ca4e2e5c968921e3f5aff4a4124db26d5062779
 quizAttemptSchema.index({ teacherId: 1, quizId: 1 });
 quizAttemptSchema.index({ uniqueToken: 1 });
 quizAttemptSchema.index({ studentEmail: 1, quizId: 1 });
