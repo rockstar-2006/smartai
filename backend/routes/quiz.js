@@ -129,10 +129,7 @@ router.post('/share', protect, async (req, res) => {
     if (!quiz) return res.status(404).json({ message: 'Quiz not found or you do not own it' });
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    // Choose client base: prefer explicit CLIENT_URL, then VERCEL_URL, then localhost
-    const clientBase = (process.env.CLIENT_URL || process.env.VERCEL_URL || 'http://localhost:8080').replace(/\/$/, '');
-
+    const clientBase = process.env.CLIENT_URL || 'http://localhost:8080';
     const results = [];
     const failed = [];
 
@@ -164,12 +161,12 @@ router.post('/share', protect, async (req, res) => {
         // IMPORTANT: link uses token in path for student page
         const uniqueLink = `${clientBase}/take/${token}`;
 
-        // send email (use req.user.name if available)
+        // send email
         await emailService.sendQuizInvitation(
           email,
           quiz.title,
           uniqueLink,
-          req.user && req.user.name ? req.user.name : 'Your Instructor',
+          req.user.name,
           message || ''
         );
 
@@ -295,95 +292,6 @@ router.get('/:id/results/download', protect, async (req, res) => {
   } catch (error) {
     console.error('GET /quiz/:id/results/download error:', error);
     res.status(400).json({ message: error.message });
-  }
-});
-
-/*
-  NEW: aggregated results for all quizzes (used by frontend to show cards)
-  GET /api/quiz/results/all
-  Returns: [ { _id, title, description, duration, createdAt, attemptCount, submittedCount, averageScore? } ]
-*/
-router.get('/results/all', protect, async (req, res) => {
-  try {
-    const QuizAttempt = require('../models/QuizAttempt');
-
-    // find quizzes owned by teacher
-    const quizzes = await Quiz.find({ userId: req.user._id })
-      .select('_id title description duration createdAt questions')
-      .lean();
-
-    if (!quizzes || quizzes.length === 0) {
-      return res.json([]);
-    }
-
-    const quizIds = quizzes.map(q => q._id);
-
-    // Aggregate attempt counts and compute average for submitted/graded only
-    const aggregation = await QuizAttempt.aggregate([
-      { $match: { quizId: { $in: quizIds }, teacherId: req.user._id } },
-      {
-        $group: {
-          _id: '$quizId',
-          attemptCount: { $sum: 1 },
-          submittedCount: {
-            $sum: {
-              $cond: [{ $in: ['$status', ['submitted', 'graded']] }, 1, 0]
-            }
-          },
-          // store sum and count for submitted attempts so we can compute average reliably
-          submittedScoreSum: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', ['submitted', 'graded']] },
-                { $ifNull: ['$score', 0] },
-                0
-              ]
-            }
-          },
-          submittedScoreCount: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', ['submitted', 'graded']] },
-                { $cond: [{ $ifNull: ['$score', false] }, 1, 0] },
-                0
-              ]
-            }
-          }
-        }
-      }
-    ]);
-
-    const statsByQuizId = aggregation.reduce((acc, cur) => {
-      acc[String(cur._id)] = cur;
-      return acc;
-    }, {});
-
-    const result = quizzes.map(q => {
-      const s = statsByQuizId[String(q._id)];
-      let avg = undefined;
-      if (s && s.submittedScoreCount > 0) {
-        // compute average. If your scores are in 0..1 convert here (detect if avg <= 1)
-        let rawAvg = s.submittedScoreSum / s.submittedScoreCount;
-        if (rawAvg <= 1) rawAvg = rawAvg * 100; // convert fraction to percentage
-        avg = Number(rawAvg);
-      }
-
-      return {
-        _id: q._id,
-        title: q.title,
-        description: q.description || '',
-        duration: q.duration || null,
-        createdAt: q.createdAt,
-        attemptCount: s ? s.attemptCount : 0,
-        submittedCount: s ? s.submittedCount : 0,
-        averageScore: avg // undefined if no submitted results
-      };
-    });
-
-    return res.json(result);
-  } catch (error) {
-    console.error('GET /quiz/results/all error:', error);
-    return res.status(400).json({ message: error.message || 'Failed to fetch quiz stats' });
   }
 });
 
