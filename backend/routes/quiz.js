@@ -24,65 +24,6 @@ router.get('/all', protect, async (req, res) => {
   }
 });
 
-/**
- * GET /quiz/results/all
- * Returns all quizzes for the authenticated teacher with simple stats
- * (attempts count and average percentage).
- */
-router.get('/results/all', protect, async (req, res) => {
-  try {
-    const QuizAttempt = require('../models/QuizAttempt');
-
-    // find quizzes owned by this user
-    const quizzes = await Quiz.find({ userId: req.user._id }).lean();
-
-    // if no quizzes, return empty
-    if (!quizzes || quizzes.length === 0) {
-      return res.json({ success: true, quizzes: [] });
-    }
-
-    // get all attempts for these quizzes (only submitted/graded matter for stats)
-    const quizIds = quizzes.map(q => q._id);
-    const attempts = await QuizAttempt.find({
-      quizId: { $in: quizIds },
-      status: { $in: ['submitted', 'graded'] }
-    }).lean();
-
-    // build map of stats per quizId
-    const statsMap = {};
-    for (const a of attempts) {
-      const id = String(a.quizId);
-      if (!statsMap[id]) statsMap[id] = { attempts: 0, totalPercentage: 0 };
-      statsMap[id].attempts += 1;
-      statsMap[id].totalPercentage += (typeof a.percentage === 'number' ? a.percentage : 0);
-    }
-
-    // compose response array
-    const results = quizzes.map(q => {
-      const id = String(q._id);
-      const s = statsMap[id] || { attempts: 0, totalPercentage: 0 };
-      const avgPercentage = s.attempts > 0 ? Math.round(s.totalPercentage / s.attempts) : 0;
-      return {
-        id: q._id,
-        title: q.title,
-        description: q.description || '',
-        numQuestions: q.questions ? q.questions.length : (q.numQuestions || 0),
-        createdAt: q.createdAt,
-        updatedAt: q.updatedAt,
-        stats: {
-          attempts: s.attempts,
-          averagePercentage: avgPercentage
-        }
-      };
-    });
-
-    return res.json({ success: true, quizzes: results });
-  } catch (error) {
-    console.error('GET /quiz/results/all error:', error);
-    return res.status(500).json({ message: error.message || 'Failed to fetch quiz stats' });
-  }
-});
-
 // Get quiz by id
 router.get('/:id', protect, async (req, res) => {
   try {
