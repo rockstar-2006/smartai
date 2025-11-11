@@ -1,14 +1,5 @@
 {
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/take/(.*)", "dest": "/" },
-    { "src": "/quiz/attempt/(.*)", "dest": "/" },
-    { "src": "/login", "dest": "/" },
-    { "src": "/dashboard", "dest": "/" },
-    { "src": "/students", "dest": "/" },
-    { "src": "/create-quiz", "dest": "/" },
-    { "src": "/bookmarks", "dest": "/" },
-    { "src": "/results", "dest": "/" },
-    { "src": "/quiz/(.*)/results", "dest": "/" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
   ]
 }
