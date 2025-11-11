@@ -237,112 +237,24 @@ router.get('/:id/results', protect, async (req, res) => {
       _id: req.params.id,
       userId: req.user._id
     }).lean();
+
     if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
 
-    const live = req.query.live === 'true' || req.query.live === true;
-
-    // get all attempts (including in-progress)
     const attempts = await QuizAttempt.find({
       quizId: req.params.id,
       teacherId: req.user._id
     }).sort('-submittedAt').lean();
 
-    if (live) {
-      // compute on-the-fly scoring for each attempt if needed
-      const questions = quiz.questions || [];
-      const defaultMaxPerQuestion = 1; // default points per question when not specified
-      const quizMax = questions.length * defaultMaxPerQuestion;
-
-      const scored = attempts.map(attempt => {
-        // prefer stored totals if present; otherwise compute
-        let totalMarks = typeof attempt.totalMarks === 'number' ? attempt.totalMarks : 0;
-        let maxMarks = typeof attempt.maxMarks === 'number' ? attempt.maxMarks : quizMax;
-        let perQuestion = Array.isArray(attempt.perQuestion) ? attempt.perQuestion : [];
-
-        // If perQuestion missing or attempt is in-progress, compute best-effort
-        if (!Array.isArray(attempt.perQuestion) || attempt.status === 'in-progress') {
-          totalMarks = 0;
-          perQuestion = [];
-
-          for (let i = 0; i < questions.length; i++) {
-            const q = questions[i];
-            const expected = (q && q.answer) ? String(q.answer).trim() : '';
-            const given = (attempt.answers && attempt.answers[i]) ? String(attempt.answers[i]).trim() : '';
-
-            let correct = false;
-            let awarded = 0;
-            let max = defaultMaxPerQuestion;
-
-            if (q.type === 'mcq') {
-              // assume expected stored as A/B/C... or the actual option text — try both
-              if (!expected) {
-                correct = false;
-              } else if (expected.length === 1 && /^[A-Z]$/i.test(expected)) {
-                correct = expected.toUpperCase() === String(given).toUpperCase();
-              } else {
-                // compare option text (case-insensitive)
-                correct = expected.toLowerCase() === (given || '').toLowerCase();
-              }
-            } else {
-              // short-answer: basic case-insensitive exact match (trim).
-              // You can replace with fuzzy matching or custom rubric later.
-              correct = expected.toLowerCase() === (given || '').toLowerCase();
-            }
-
-            if (correct) {
-              awarded = max;
-              totalMarks += awarded;
-            }
-
-            perQuestion.push({
-              questionIndex: i,
-              correct,
-              awarded,
-              max,
-              expectedAnswer: expected,
-              givenAnswer: given
-            });
-          }
-
-          // recompute maxMarks
-          maxMarks = questions.length * defaultMaxPerQuestion;
-        }
-
-        const percentage = maxMarks > 0 ? (totalMarks / maxMarks) * 100 : 0;
-
-        // return a version that includes computed values but doesn't overwrite DB
-        return {
-          ...attempt,
-          totalMarks,
-          maxMarks,
-          percentage: Number(percentage.toFixed(2)),
-          perQuestion
-        };
-      });
-
-      return res.json({
-        success: true,
-        quiz: {
-          id: quiz._id,
-          title: quiz.title,
-          description: quiz.description,
-          numQuestions: (quiz.questions || []).length
-        },
-        attempts: scored
-      });
-    } else {
-      // not live: return attempts as-is (teacher expects stored totals)
-      res.json({
-        success: true,
-        quiz: {
-          id: quiz._id,
-          title: quiz.title,
-          description: quiz.description,
-          numQuestions: (quiz.questions || []).length
-        },
-        attempts
-      });
-    }
+    res.json({
+      success: true,
+      quiz: {
+        id: quiz._id,
+        title: quiz.title,
+        description: quiz.description,
+        numQuestions: quiz.questions ? quiz.questions.length : (quiz.numQuestions || 0)
+      },
+      attempts
+    });
   } catch (error) {
     console.error('GET /quiz/:id/results error:', error);
     res.status(400).json({ message: error.message });
